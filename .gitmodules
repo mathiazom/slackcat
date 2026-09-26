@@ -1,0 +1,12 @@
+[submodule "slackopy"]
+	path = slackopy
+	url = git@github.com:mathiazom/slackopy.git
+[submodule "slackback"]
+	path = slackback
+	url = git@github.com:mathiazom/slackback.git
+[submodule "slacktrack"]
+	path = slacktrack
+	url = git@github.com:mathiazom/slacktrack.git
+[submodule "slackpack"]
+	path = slackpack
+	url = git@github.com:mathiazom/slackpack.git
