@@ -350,8 +350,7 @@ cat >"$DEPLOY_DIR/fusionauth-kickstart.json" <<'KICKSTARTEOF'
   "apiKeys": [
     {
       "key": "#{apiKey}",
-      "description": "Unrestricted API key",
-      "permissions": {}
+      "description": "Unrestricted API key"
     }
   ],
   "requests": [
@@ -367,7 +366,6 @@ cat >"$DEPLOY_DIR/fusionauth-kickstart.json" <<'KICKSTARTEOF'
     {
       "method": "POST",
       "url": "/api/key/generate/#{asymmetricKeyId}",
-      "tenantId": "#{defaultTenantId}",
       "body": {
         "key": {
           "algorithm": "RS256",
