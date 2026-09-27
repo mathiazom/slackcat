@@ -149,7 +149,7 @@ ENVEOF
 
 cat >"$DEPLOY_DIR/docker-compose.yml" <<'COMPOSEEOF'
 services:
-  postgres:
+  slackcat-postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -164,12 +164,12 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  seaweedfs:
+  slackcat-seaweedfs:
     image: chrislusf/seaweedfs
     restart: unless-stopped
     # -ip.bind must be explicit: -ip alone controls both the advertised address AND
     # what the listener binds to.
-    command: server -dir=/data -master.volumeSizeLimitMB=1024 -ip=seaweedfs -ip.bind=0.0.0.0
+    command: server -dir=/data -master.volumeSizeLimitMB=1024 -ip=slackcat-seaweedfs -ip.bind=0.0.0.0
     # Also on "proxy" (the admin's existing reverse-proxy network) since archived
     # files need to be reachable externally - unlike postgres/slackpack/slackback,
     # which only ever talk to each other and stay on the internal "default" network.
@@ -179,7 +179,7 @@ services:
     volumes:
       - seaweedfs-data:/data
 
-  fusionauth-db:
+  slackcat-fusionauth-db:
     image: postgres:16.0-bookworm
     restart: unless-stopped
     environment:
@@ -194,21 +194,21 @@ services:
     volumes:
       - fusionauth-db-data:/var/lib/postgresql/data
 
-  fusionauth:
+  slackcat-fusionauth:
     image: fusionauth/fusionauth-app:latest
     restart: unless-stopped
     depends_on:
-      fusionauth-db:
+      slackcat-fusionauth-db:
         condition: service_healthy
     environment:
-      DATABASE_URL: jdbc:postgresql://fusionauth-db:5432/fusionauth
+      DATABASE_URL: jdbc:postgresql://slackcat-fusionauth-db:5432/fusionauth
       DATABASE_ROOT_USERNAME: postgres
       DATABASE_ROOT_PASSWORD: ${FUSIONAUTH_DB_PASSWORD}
       DATABASE_USERNAME: fusionauth
       DATABASE_PASSWORD: ${FUSIONAUTH_DB_PASSWORD}
       FUSIONAUTH_APP_MEMORY: 512M
       FUSIONAUTH_APP_RUNTIME_MODE: production
-      FUSIONAUTH_APP_URL: http://fusionauth:9011
+      FUSIONAUTH_APP_URL: http://slackcat-fusionauth:9011
       FUSIONAUTH_APP_KICKSTART_FILE: /usr/local/fusionauth/kickstart/kickstart.json
       # Read by kickstart.json via #{ENV.X} - resolved fresh every container start,
       # so editing .env and running `docker compose up` is enough; no need to
@@ -231,34 +231,34 @@ services:
       - fusionauth-config:/usr/local/fusionauth/config
       - ./fusionauth-kickstart.json:/usr/local/fusionauth/kickstart/kickstart.json:ro
 
-  slackpack:
+  slackcat-slackpack:
     image: ghcr.io/mathiazom/slackpack:main
     restart: unless-stopped
     depends_on:
-      postgres:
+      slackcat-postgres:
         condition: service_healthy
     environment:
       SLACK_AUTH_TOKEN: ${SLACK_AUTH_TOKEN}
       SLACK_AUTH_COOKIE: ${SLACK_AUTH_COOKIE}
-      DATABASE_CONNECTION_STRING: postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat
-      SEAWEEDFS_MASTER_URL: http://seaweedfs:9333
+      DATABASE_CONNECTION_STRING: postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat
+      SEAWEEDFS_MASTER_URL: http://slackcat-seaweedfs:9333
 
-  init-migrate:
+  slackcat-init-migrate:
     image: ghcr.io/mathiazom/slackpack:main
     restart: "no"
     depends_on:
-      postgres:
+      slackcat-postgres:
         condition: service_healthy
     entrypoint: ["/root/slackpack"]
     command: ["-migrate"]
     environment:
-      DATABASE_CONNECTION_STRING: postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat
+      DATABASE_CONNECTION_STRING: postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat
 
-  init-slackback-role:
+  slackcat-init-slackback-role:
     image: postgres:17-alpine
     restart: "no"
     depends_on:
-      postgres:
+      slackcat-postgres:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     # Idempotent - safe to re-run. slackback only ever reads, so this grants SELECT
@@ -270,31 +270,31 @@ services:
     command:
       - |
         set -e
-        psql "postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat" -c "CREATE ROLE slackback WITH LOGIN PASSWORD '${SLACKBACK_DB_PASSWORD}'" || \
-          psql "postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat" -c "ALTER ROLE slackback WITH LOGIN PASSWORD '${SLACKBACK_DB_PASSWORD}'"
-        psql "postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat" -c "GRANT CONNECT ON DATABASE slackcat TO slackback"
-        psql "postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat" -c "GRANT USAGE ON SCHEMA public TO slackback"
-        psql "postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO slackback"
-        psql "postgres://slackcat:${POSTGRES_PASSWORD}@postgres:5432/slackcat" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO slackback"
+        psql "postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat" -c "CREATE ROLE slackback WITH LOGIN PASSWORD '${SLACKBACK_DB_PASSWORD}'" || \
+          psql "postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat" -c "ALTER ROLE slackback WITH LOGIN PASSWORD '${SLACKBACK_DB_PASSWORD}'"
+        psql "postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat" -c "GRANT CONNECT ON DATABASE slackcat TO slackback"
+        psql "postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat" -c "GRANT USAGE ON SCHEMA public TO slackback"
+        psql "postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO slackback"
+        psql "postgres://slackcat:${POSTGRES_PASSWORD}@slackcat-postgres:5432/slackcat" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO slackback"
 
-  slackback:
+  slackcat-slackback:
     image: ghcr.io/mathiazom/slackback:main
     restart: unless-stopped
     depends_on:
-      postgres:
+      slackcat-postgres:
         condition: service_healthy
     environment:
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Username=slackback;Password=${SLACKBACK_DB_PASSWORD};Database=slackcat
+      ConnectionStrings__Postgres: Host=slackcat-postgres;Port=5432;Username=slackback;Password=${SLACKBACK_DB_PASSWORD};Database=slackcat
       SeaweedFs__PublicUrl: https://${FILES_PUBLIC_DOMAIN}
 
-  slackopy:
+  slackcat-slackopy:
     image: ghcr.io/mathiazom/slackopy:main
     restart: unless-stopped
     depends_on:
-      - slackback
-      - fusionauth
+      - slackcat-slackback
+      - slackcat-fusionauth
     environment:
-      BACKEND_URL: http://slackback:8080
+      BACKEND_URL: http://slackcat-slackback:8080
       HOST_URL: https://${PUBLIC_DOMAIN}
       AUTH_SECRET: ${AUTH_SECRET}
       FUSIONAUTH_CLIENT_ID: ${FUSIONAUTH_APPLICATION_ID}
@@ -417,9 +417,9 @@ cat <<SUMMARYEOF
 No host ports are published. This deployment joins REVERSE_PROXY_NETWORK (your
 existing Nginx Proxy Manager/Traefik network) - in your proxy, point each domain at
 the corresponding container name + internal port:
-  PUBLIC_DOMAIN            -> slackopy:4321
-  FUSIONAUTH_PUBLIC_DOMAIN -> fusionauth:9011
-  FILES_PUBLIC_DOMAIN      -> seaweedfs:8080
+  PUBLIC_DOMAIN            -> slackcat-slackopy:4321
+  FUSIONAUTH_PUBLIC_DOMAIN -> slackcat-fusionauth:9011
+  FILES_PUBLIC_DOMAIN      -> slackcat-seaweedfs:8080
 (if your reverse proxy isn't itself running in Docker, add "ports:" mappings back
 to the relevant services in docker-compose.yml instead, and drop the "proxy" network
 entries)
