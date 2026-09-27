@@ -1,0 +1,87 @@
+{
+  "variables": {
+    "apiKey": "33052c8a-c283-4e96-9d2a-eb1215c69f8f-not-for-prod",
+    "applicationId": "9f13ba2a-6a24-4a19-a1e7-4b3dcb2f0000",
+    "clientSecret": "slackopy-dev-secret-change-me",
+    "defaultTenantId": "d7d09513-a3f5-401c-9685-34ab6c552453",
+    "adminEmail": "admin@example.com",
+    "adminPassword": "password",
+    "adminUserId": "00000000-0000-0000-0000-000000000001",
+    "userEmail": "dev@example.com",
+    "userPassword": "password",
+    "userUserId": "00000000-0000-0000-0000-111111111111"
+  },
+  "apiKeys": [
+    {
+      "key": "#{apiKey}",
+      "description": "Unrestricted API key"
+    }
+  ],
+  "requests": [
+    {
+      "method": "PATCH",
+      "url": "/api/tenant/#{defaultTenantId}",
+      "body": {
+        "tenant": {
+          "issuer": "http://localhost:9011"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/application/#{applicationId}",
+      "tenantId": "#{defaultTenantId}",
+      "body": {
+        "application": {
+          "name": "slackopy (dev)",
+          "oauthConfiguration": {
+            "authorizedRedirectURLs": [
+              "http://localhost:4321/api/auth/callback/fusionauth"
+            ],
+            "logoutURL": "http://localhost:4321",
+            "clientSecret": "#{clientSecret}",
+            "enabledGrants": [
+              "authorization_code",
+              "refresh_token"
+            ],
+            "generateRefreshTokens": true,
+            "requireRegistration": true
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{userUserId}",
+      "body": {
+        "user": {
+          "email": "#{userEmail}",
+          "password": "#{userPassword}",
+          "firstName": "Dev",
+          "lastName": "User"
+        },
+        "registration": {
+          "applicationId": "#{applicationId}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "user": {
+          "email": "#{adminEmail}",
+          "password": "#{adminPassword}",
+          "firstName": "Admin",
+          "lastName": "User"
+        },
+        "registration": {
+          "applicationId": "#{FUSIONAUTH_APPLICATION_ID}",
+          "roles": ["admin"]
+        },
+        "roles": ["admin"],
+        "skipRegistrationVerification": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: slackcat
+      POSTGRES_PASSWORD: slackcat
+      POSTGRES_DB: slackcat
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  seaweedfs:
+    image: chrislusf/seaweedfs
+    # -ip.bind must be set explicitly: -ip alone controls both the advertised address
+    # AND what the listener binds to, so without it, -ip=localhost would bind only to
+    # the container's own loopback and be unreachable via the published ports below.
+    command: server -dir=/data -master.volumeSizeLimitMB=100 -ip=localhost -ip.bind=0.0.0.0
+    ports:
+      - "9333:9333" # master (assign/lookup)
+      - "8080:8080" # volume (file read/write)
+    volumes:
+      - seaweedfs-data:/data
+
+  fusionauth-db:
+    image: postgres:16.0-bookworm
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: fusionauth
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - fusionauth-db-data:/var/lib/postgresql/data
+
+  fusionauth:
+    image: fusionauth/fusionauth-app:latest
+    depends_on:
+      fusionauth-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://fusionauth-db:5432/fusionauth
+      DATABASE_ROOT_USERNAME: postgres
+      DATABASE_ROOT_PASSWORD: fusionauth
+      DATABASE_USERNAME: fusionauth
+      DATABASE_PASSWORD: fusionauth
+      FUSIONAUTH_APP_MEMORY: 512M
+      FUSIONAUTH_APP_RUNTIME_MODE: development
+      FUSIONAUTH_APP_URL: http://localhost:9011
+      FUSIONAUTH_APP_KICKSTART_FILE: /usr/local/fusionauth/kickstart/kickstart.json
+    ports:
+      - "9011:9011"
+    volumes:
+      - fusionauth-config:/usr/local/fusionauth/config
+      - ./fusionauth-kickstart.json:/usr/local/fusionauth/kickstart/kickstart.json:ro
+
+volumes:
+  postgres-data:
+  seaweedfs-data:
+  fusionauth-db-data:
+  fusionauth-config:
