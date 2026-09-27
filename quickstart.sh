@@ -344,12 +344,14 @@ cat >"$DEPLOY_DIR/fusionauth-kickstart.json" <<'KICKSTARTEOF'
     "applicationId": "#{ENV.FUSIONAUTH_APPLICATION_ID}",
     "clientSecret": "#{ENV.FUSIONAUTH_CLIENT_SECRET}",
     "defaultTenantId": "d7d09513-a3f5-401c-9685-34ab6c552453",
-    "adminUserId": "00000000-0000-0000-0000-000000000001"
+    "adminUserId": "00000000-0000-0000-0000-000000000001",
+    "asymmetricKeyId": "00000000-0000-0000-0000-000000000002"
   },
   "apiKeys": [
     {
       "key": "#{apiKey}",
-      "description": "Unrestricted API key"
+      "description": "Unrestricted API key",
+      "permissions": {}
     }
   ],
   "requests": [
@@ -364,11 +366,28 @@ cat >"$DEPLOY_DIR/fusionauth-kickstart.json" <<'KICKSTARTEOF'
     },
     {
       "method": "POST",
+      "url": "/api/key/generate/#{asymmetricKeyId}",
+      "tenantId": "#{defaultTenantId}",
+      "body": {
+        "key": {
+          "algorithm": "RS256",
+          "name": "slackopy",
+          "length": 2048
+        }
+      }
+    },
+    {
+      "method": "POST",
       "url": "/api/application/#{applicationId}",
       "tenantId": "#{defaultTenantId}",
       "body": {
         "application": {
           "name": "slackopy",
+          "jwtConfiguration": {
+            "enabled": true,
+            "accessTokenKeyId": "#{asymmetricKeyId}",
+            "idTokenKeyId": "#{asymmetricKeyId}"
+          },
           "oauthConfiguration": {
             "authorizedRedirectURLs": [
               "#{ENV.FUSIONAUTH_REDIRECT_URL}"
