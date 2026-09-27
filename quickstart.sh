@@ -77,6 +77,7 @@ set_env AUTH_SECRET random_hex
 set_env FUSIONAUTH_API_KEY random_uuid
 set_env FUSIONAUTH_APPLICATION_ID random_uuid
 set_env FUSIONAUTH_CLIENT_SECRET random_hex
+set_env FUSIONAUTH_ADMIN_PASSWORD random_hex
 
 # prompt_env NAME LABEL [secret]
 # Keeps an already-set value the same way set_env does. Otherwise, if a terminal is
@@ -145,6 +146,7 @@ AUTH_SECRET=$AUTH_SECRET
 FUSIONAUTH_API_KEY=$FUSIONAUTH_API_KEY
 FUSIONAUTH_APPLICATION_ID=$FUSIONAUTH_APPLICATION_ID
 FUSIONAUTH_CLIENT_SECRET=$FUSIONAUTH_CLIENT_SECRET
+FUSIONAUTH_ADMIN_PASSWORD=$FUSIONAUTH_ADMIN_PASSWORD
 ENVEOF
 
 cat >"$DEPLOY_DIR/docker-compose.yml" <<'COMPOSEEOF'
@@ -216,6 +218,7 @@ services:
       FUSIONAUTH_API_KEY: ${FUSIONAUTH_API_KEY}
       FUSIONAUTH_APPLICATION_ID: ${FUSIONAUTH_APPLICATION_ID}
       FUSIONAUTH_CLIENT_SECRET: ${FUSIONAUTH_CLIENT_SECRET}
+      FUSIONAUTH_ADMIN_PASSWORD: ${FUSIONAUTH_ADMIN_PASSWORD}
       # Concatenation happens here (compose's ${VAR}-in-string, already proven), not
       # in the kickstart file - FusionAuth's #{ENV.X} is only confirmed to do whole-
       # value substitution, not concatenation with surrounding literal text.
@@ -339,7 +342,8 @@ cat >"$DEPLOY_DIR/fusionauth-kickstart.json" <<'KICKSTARTEOF'
     "apiKey": "#{ENV.FUSIONAUTH_API_KEY}",
     "applicationId": "#{ENV.FUSIONAUTH_APPLICATION_ID}",
     "clientSecret": "#{ENV.FUSIONAUTH_CLIENT_SECRET}",
-    "defaultTenantId": "d7d09513-a3f5-401c-9685-34ab6c552453"
+    "defaultTenantId": "d7d09513-a3f5-401c-9685-34ab6c552453",
+    "adminUserId": "00000000-0000-0000-0000-000000000001"
   },
   "apiKeys": [
     {
@@ -375,9 +379,25 @@ cat >"$DEPLOY_DIR/fusionauth-kickstart.json" <<'KICKSTARTEOF'
               "refresh_token"
             ],
             "generateRefreshTokens": true,
-            "requireRegistration": true
+            "requireRegistration": false
           }
         }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "user": {
+          "username": "admin",
+          "password": "#{ENV.FUSIONAUTH_ADMIN_PASSWORD}"
+        },
+        "registration": {
+          "applicationId": "#{FUSIONAUTH_APPLICATION_ID}",
+          "roles": ["admin"]
+        },
+        "roles": ["admin"],
+        "skipRegistrationVerification": true
       }
     }
   ]
@@ -411,6 +431,16 @@ else
 	echo
 	echo "Everything required is filled in - ready to run 'docker compose up -d' in $DEPLOY_DIR."
 fi
+
+cat <<SUMMARYEOF
+
+FusionAuth admin login (once running, at https://$FUSIONAUTH_PUBLIC_DOMAIN/admin):
+  username: admin
+  password: $FUSIONAUTH_ADMIN_PASSWORD
+This password is also saved in $ENV_FILE as FUSIONAUTH_ADMIN_PASSWORD - kickstart only
+runs once against a fresh FusionAuth instance, so changing it there later has no
+effect; change it from the admin console instead.
+SUMMARYEOF
 
 cat <<SUMMARYEOF
 
