@@ -437,10 +437,9 @@ cat <<SUMMARYEOF
 
 FusionAuth admin login (once running, at https://$FUSIONAUTH_PUBLIC_DOMAIN/admin):
   username: admin
-  password: $FUSIONAUTH_ADMIN_PASSWORD
-This password is also saved in $ENV_FILE as FUSIONAUTH_ADMIN_PASSWORD - kickstart only
-runs once against a fresh FusionAuth instance, so changing it there later has no
-effect; change it from the admin console instead.
+  password: see FUSIONAUTH_ADMIN_PASSWORD in $ENV_FILE
+Kickstart only runs once against a fresh FusionAuth instance, so changing that value
+later has no effect; change the password from the admin console instead.
 SUMMARYEOF
 
 cat <<SUMMARYEOF
