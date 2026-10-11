@@ -42,3 +42,10 @@ domains, reverse-proxy network name) are prompted for interactively, else left
 blank and listed at the end. No bundled proxy or published ports — the deployment
 joins the admin's existing proxy network instead (`REVERSE_PROXY_NETWORK`), since
 that's the standard direction for these setups.
+## slackback: channel views show the latest snapshot
+
+`channel` rows are snapshots (one per detected metadata change), but the channel
+list and channel page both show only the most recent snapshot per `public_id`.
+Older snapshots are kept for a possible future historical timeline, but nothing
+exposes them yet. Channels that are archived or deleted in Slack stay listed,
+since this is an archive.
