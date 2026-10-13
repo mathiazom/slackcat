@@ -49,3 +49,25 @@ list and channel page both show only the most recent snapshot per `public_id`.
 Older snapshots are kept for a possible future historical timeline, but nothing
 exposes them yet. Channels that are archived or deleted in Slack stay listed,
 since this is an archive.
+
+## slackback: users resolve as of message time
+
+Authors, mentions and reactors use the user snapshot valid at the message ts, from
+the `user` table only (not the `user_profile` Slack embeds in messages). Snapshots
+are daily, so a profile change shows up to a day late; accepted. Before a user's
+first snapshot: earliest name, placeholder avatar (we don't know their face then).
+
+## slackpack: avatars
+
+Archived per user snapshot into the unversioned `avatar` table, keyed by Slack URL,
+with pointers embedded in the snapshot JSON at pack time like files
+(`internal/packing/avatars.go`). Change detection ignores those pointers. Gone
+images (403/404/410) are never retried. Bot avatars: not yet.
+
+## slackopy: channel view reads like Slack
+
+Chronological, with consecutive messages grouped under one header
+(`src/lib/groupMessages.ts`). Opens at the newest message without JavaScript:
+links end in `#latest`, and `scroll-initial-target` covers bare URLs in Chromium.
+This relies on images having their final size before loading (Slack's
+`original_w`/`original_h`).
