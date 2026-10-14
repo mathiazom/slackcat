@@ -55,7 +55,10 @@ since this is an archive.
 Authors, mentions and reactors use the user snapshot valid at the message ts, from
 the `user` table only (not the `user_profile` Slack embeds in messages). Snapshots
 are daily, so a profile change shows up to a day late; accepted. Before a user's
-first snapshot: earliest name, placeholder avatar (we don't know their face then).
+first snapshot: earliest name. Avatars resolve separately, by when the photo became
+current (see avatars below), so a photo can change before the names do and show up
+in pre-archive history. Before that: placeholder (we don't know their face then).
+Message grouping still breaks on snapshot only, not on photo changes.
 
 ## slackpack: avatars
 
@@ -63,6 +66,13 @@ Archived per user snapshot into the unversioned `avatar` table, keyed by Slack U
 with pointers embedded in the snapshot JSON at pack time like files
 (`internal/packing/avatars.go`). Change detection ignores those pointers. Gone
 images (403/404/410) are never retried. Bot avatars: not yet.
+
+Each snapshot also gets `archived_avatar_since` (unix seconds), the time from which
+its photo was current. It comes from the upload date in Slack's avatar URL
+(`avatars.slack-edge.com/YYYY-MM-DD/…`, undocumented), from the start of the next UTC
+day so a photo never shows early. The URL date is only trusted when it's before the
+snapshot and after the latest earlier snapshot with a different `image_72`, otherwise
+the snapshot time is used. It's resolved once at pack time, so slackback only compares.
 
 ## slackopy: channel view reads like Slack
 
