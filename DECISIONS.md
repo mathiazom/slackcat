@@ -81,3 +81,11 @@ Chronological, with consecutive messages grouped under one header
 links end in `#latest`, and `scroll-initial-target` covers bare URLs in Chromium.
 This relies on images having their final size before loading (Slack's
 `original_w`/`original_h`).
+
+## slackpack: converted copies for non-browser images
+
+HEIC/HEIF and TIFF get a full-resolution JPEG copy, converted from the archived
+original (`internal/packing/conversions.go`), so it backfills without Slack. Embedded
+in the file JSON like the original's pointer; undecodable files are never retried.
+slackback's `ImageUrl` is the original for browser-safe types, else the copy, else
+null (link only).
