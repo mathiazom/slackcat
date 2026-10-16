@@ -9,6 +9,12 @@ this is final: question an entry when new work gives a reason to.
 slackopy is SSR, checking the session per page. Fully static behind an Astro
 middleware auth-gate is the goal, done in one pass so the site is never ungated.
 
+## slackpack stores Slack's raw JSON
+
+A minimal own client (`internal/slackapi`) rather than a typed library, so no field
+Slack sends is lost. Only volatile keys (statuses, huddles, dormancy) and the token owner's `saved`
+state are stripped, so snapshots don't churn.
+
 ## Archive in slackpack, embed pointers in JSON
 
 Files and avatars go into unversioned tables (Slack IDs/URLs are immutable), with
