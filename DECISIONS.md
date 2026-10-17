@@ -6,8 +6,10 @@ this is final: question an entry when new work gives a reason to.
 
 ## Rendering & auth
 
-slackopy is SSR, checking the session per page. Fully static behind an Astro
-middleware auth-gate is the goal, done in one pass so the site is never ungated.
+slackopy is a static site, rebuilt at startup and daily after slackpack's sync. An
+auth proxy in front gates every path, archived files included, redirecting straight
+to FusionAuth login: no public pages, no login screen. Logins last 30 days but are
+rechecked against FusionAuth hourly.
 
 ## slackpack stores Slack's raw JSON
 

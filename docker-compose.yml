@@ -57,6 +57,23 @@ services:
       - fusionauth-config:/usr/local/fusionauth/config
       - ./fusionauth-kickstart.json:/usr/local/fusionauth/kickstart/kickstart.json:ro
 
+  slackopy-gate:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
+    command: ["--alpha-config=/oauth2-proxy.yaml"]
+    environment:
+      OAUTH2_PROXY_COOKIE_SECRET: slackopy-dev-cookie-secret-32byt
+      OAUTH2_PROXY_COOKIE_SECURE: "false"
+      OAUTH2_PROXY_REDIRECT_URL: http://localhost:4180/oauth2/callback
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_COOKIE_EXPIRE: 720h
+      OAUTH2_PROXY_COOKIE_REFRESH: 1h
+    ports:
+      - "4180:4180"
+    volumes:
+      - ./oauth2-proxy.yaml:/oauth2-proxy.yaml:ro
+      - ./slackopy/dist:/site/current:ro
+
 volumes:
   postgres-data:
   seaweedfs-data:

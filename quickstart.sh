@@ -1,12 +1,14 @@
 #!/bin/sh
 # Quickstart setup for slackcat: generates a self-contained deployment directory
-# (docker-compose.yml, .env, fusionauth-kickstart.json) for the whole system -
-# postgres, seaweedfs, fusionauth, slackpack, slackback, slackopy.
+# (docker-compose.yml, .env, fusionauth-kickstart.json, oauth2-proxy.yaml) for the
+# whole system - postgres, seaweedfs, fusionauth, slackpack, slackback, slackopy and
+# the auth gate in front of it.
 #
 # Safe to re-run: secrets already present in an existing .env are preserved (only
-# missing ones are generated); docker-compose.yml and fusionauth-kickstart.json are
-# always rewritten from the current templates, so re-running after pulling repo
-# updates picks up changes without losing secrets or admin-supplied values.
+# missing ones are generated); docker-compose.yml, fusionauth-kickstart.json and
+# oauth2-proxy.yaml are always rewritten from the current templates, so re-running
+# after pulling repo updates picks up changes without losing secrets or
+# admin-supplied values.
 #
 # Usage: ./quickstart.sh <deploy-dir>
 #
@@ -36,6 +38,11 @@ mkdir -p "$DEPLOY_DIR"
 
 random_hex() {
 	openssl rand -hex 24
+}
+
+# 32 bytes, a length oauth2-proxy accepts for its cookie secret.
+random_cookie_secret() {
+	openssl rand -hex 16
 }
 
 random_uuid() {
@@ -73,7 +80,7 @@ set_env() {
 set_env POSTGRES_PASSWORD random_hex
 set_env SLACKBACK_DB_PASSWORD random_hex
 set_env FUSIONAUTH_DB_PASSWORD random_hex
-set_env AUTH_SECRET random_hex
+set_env GATE_COOKIE_SECRET random_cookie_secret
 set_env FUSIONAUTH_API_KEY random_uuid
 set_env FUSIONAUTH_APPLICATION_ID random_uuid
 set_env FUSIONAUTH_CLIENT_SECRET random_hex
@@ -116,7 +123,6 @@ prompt_env SLACK_AUTH_TOKEN "Slack auth token (xoxc-...)" secret
 prompt_env SLACK_AUTH_COOKIE "Slack session cookie (the \"d\" cookie value, xoxd-...)" secret
 prompt_env PUBLIC_DOMAIN "Public domain for slackopy (e.g. slack.example.com)"
 prompt_env FUSIONAUTH_PUBLIC_DOMAIN "Public domain for FusionAuth (e.g. auth.example.com)"
-prompt_env FILES_PUBLIC_DOMAIN "Public domain for archived files (e.g. files.example.com)"
 prompt_env REVERSE_PROXY_NETWORK "Name of your existing reverse-proxy's Docker network to join (e.g. the network your Nginx Proxy Manager/Traefik container is already on)"
 
 cat >"$ENV_FILE" <<ENVEOF
@@ -131,8 +137,6 @@ PUBLIC_DOMAIN=$PUBLIC_DOMAIN
 # Real public domain FusionAuth will be reached at - must be reachable directly by
 # end-user browsers (the login redirect goes here), not just internally
 FUSIONAUTH_PUBLIC_DOMAIN=$FUSIONAUTH_PUBLIC_DOMAIN
-# Real public domain archived files will be reached at (served by SeaweedFS)
-FILES_PUBLIC_DOMAIN=$FILES_PUBLIC_DOMAIN
 # Name of your already-existing reverse-proxy Docker network (e.g. Nginx Proxy
 # Manager's or Traefik's own network) - this deployment joins it, not the other way
 # around, since the proxy is the shared, standing piece of infrastructure here
@@ -142,7 +146,7 @@ REVERSE_PROXY_NETWORK=$REVERSE_PROXY_NETWORK
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 SLACKBACK_DB_PASSWORD=$SLACKBACK_DB_PASSWORD
 FUSIONAUTH_DB_PASSWORD=$FUSIONAUTH_DB_PASSWORD
-AUTH_SECRET=$AUTH_SECRET
+GATE_COOKIE_SECRET=$GATE_COOKIE_SECRET
 FUSIONAUTH_API_KEY=$FUSIONAUTH_API_KEY
 FUSIONAUTH_APPLICATION_ID=$FUSIONAUTH_APPLICATION_ID
 FUSIONAUTH_CLIENT_SECRET=$FUSIONAUTH_CLIENT_SECRET
@@ -172,12 +176,6 @@ services:
     # -ip.bind must be explicit: -ip alone controls both the advertised address AND
     # what the listener binds to.
     command: server -dir=/data -master.volumeSizeLimitMB=1024 -ip=slackcat-seaweedfs -ip.bind=0.0.0.0
-    # Also on "proxy" (the admin's existing reverse-proxy network) since archived
-    # files need to be reachable externally - unlike postgres/slackpack/slackback,
-    # which only ever talk to each other and stay on the internal "default" network.
-    networks:
-      - default
-      - proxy
     volumes:
       - seaweedfs-data:/data
 
@@ -223,10 +221,10 @@ services:
       # in the kickstart file - FusionAuth's #{ENV.X} is only confirmed to do whole-
       # value substitution, not concatenation with surrounding literal text.
       FUSIONAUTH_ISSUER: https://${FUSIONAUTH_PUBLIC_DOMAIN}
-      FUSIONAUTH_REDIRECT_URL: https://${PUBLIC_DOMAIN}/api/auth/callback/fusionauth
+      FUSIONAUTH_REDIRECT_URL: https://${PUBLIC_DOMAIN}/oauth2/callback
       FUSIONAUTH_LOGOUT_URL: https://${PUBLIC_DOMAIN}
     # Also on "proxy" - end-user browsers hit FusionAuth directly for the login
-    # redirect, so it needs to be externally reachable, same as seaweedfs/slackopy.
+    # redirect, so it needs to be externally reachable, same as slackopy.
     networks:
       - default
       - proxy
@@ -288,33 +286,60 @@ services:
         condition: service_healthy
     environment:
       ConnectionStrings__Postgres: Host=slackcat-postgres;Port=5432;Username=slackback;Password=${SLACKBACK_DB_PASSWORD};Database=slackcat
-      SeaweedFs__PublicUrl: https://${FILES_PUBLIC_DOMAIN}
+      # Served by the auth gate, on slackopy's own origin.
+      SeaweedFs__PublicUrl: /files
 
-  slackcat-slackopy:
+  # Builds the static site into the "site" volume at startup and daily after
+  # slackpack's sync.
+  slackcat-slackopy-builder:
     image: ghcr.io/mathiazom/slackopy:main
     restart: unless-stopped
     depends_on:
       - slackcat-slackback
-      - slackcat-fusionauth
     environment:
       BACKEND_URL: http://slackcat-slackback:8080
-      HOST_URL: https://${PUBLIC_DOMAIN}
-      AUTH_SECRET: ${AUTH_SECRET}
-      AUTH_TRUST_HOST: "true"
+    volumes:
+      - site:/site
+
+  # The auth gate: serves the static site and archived files, only to users
+  # logged in through FusionAuth. Named slackopy since it's what users reach.
+  # Pinned, since its config format (alpha config) may change between releases.
+  slackcat-slackopy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5
+    restart: unless-stopped
+    depends_on:
+      - slackcat-fusionauth
+    command: ["--alpha-config=/oauth2-proxy.yaml"]
+    environment:
+      # Read by oauth2-proxy.yaml.
+      FUSIONAUTH_URL: https://${FUSIONAUTH_PUBLIC_DOMAIN}
       FUSIONAUTH_CLIENT_ID: ${FUSIONAUTH_APPLICATION_ID}
       FUSIONAUTH_CLIENT_SECRET: ${FUSIONAUTH_CLIENT_SECRET}
-      FUSIONAUTH_URL: https://${FUSIONAUTH_PUBLIC_DOMAIN}
+      OAUTH2_PROXY_COOKIE_SECRET: ${GATE_COOKIE_SECRET}
+      OAUTH2_PROXY_REDIRECT_URL: https://${PUBLIC_DOMAIN}/oauth2/callback
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      # Straight to FusionAuth's login, no sign-in page of its own.
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      # Logins last 30 days, but are checked against FusionAuth hourly, so a
+      # deactivated user loses access within the hour.
+      OAUTH2_PROXY_COOKIE_EXPIRE: 720h
+      OAUTH2_PROXY_COOKIE_REFRESH: 1h
     # Also on "proxy" - this is the one end-user-facing entry point into the whole
     # system.
     networks:
       - default
       - proxy
+    volumes:
+      - ./oauth2-proxy.yaml:/oauth2-proxy.yaml:ro
+      - site:/site:ro
 
 volumes:
   postgres-data:
   seaweedfs-data:
   fusionauth-db-data:
   fusionauth-config:
+  site:
 
 networks:
   # Internal-only network for services that only ever talk to each other
@@ -422,8 +447,37 @@ cat >"$DEPLOY_DIR/fusionauth-kickstart.json" <<'KICKSTARTEOF'
 }
 KICKSTARTEOF
 
+# Static template like the kickstart file: per-deployment values come from the gate
+# container's environment (${X}), resolved by oauth2-proxy at start.
+cat >"$DEPLOY_DIR/oauth2-proxy.yaml" <<'GATEEOF'
+upstreamConfig:
+  upstreams:
+    - id: files
+      path: ^/files/(.*)$
+      rewriteTarget: /$1
+      uri: http://slackcat-seaweedfs:8080
+    - id: site
+      path: /
+      uri: file:///site/current/
+server:
+  BindAddress: 0.0.0.0:4321
+providers:
+  - id: fusionauth
+    provider: oidc
+    clientID: ${FUSIONAUTH_CLIENT_ID}
+    clientSecret: ${FUSIONAUTH_CLIENT_SECRET}
+    scope: openid profile offline_access
+    oidcConfig:
+      issuerURL: ${FUSIONAUTH_URL}
+      # Any user FusionAuth lets in may view; users need no email (the admin has
+      # none).
+      emailClaim: sub
+      insecureAllowUnverifiedEmail: true
+      audienceClaims: [aud]
+GATEEOF
+
 missing=""
-for name in SLACK_AUTH_TOKEN SLACK_AUTH_COOKIE PUBLIC_DOMAIN FUSIONAUTH_PUBLIC_DOMAIN FILES_PUBLIC_DOMAIN REVERSE_PROXY_NETWORK; do
+for name in SLACK_AUTH_TOKEN SLACK_AUTH_COOKIE PUBLIC_DOMAIN FUSIONAUTH_PUBLIC_DOMAIN REVERSE_PROXY_NETWORK; do
 	eval "value=\${$name:-}"
 	if [ -z "$value" ]; then
 		missing="$missing $name"
@@ -436,6 +490,7 @@ Generated in $DEPLOY_DIR:
   - .env                     (secrets generated/prompted for)
   - docker-compose.yml       (whole system - no reverse proxy bundled; see below)
   - fusionauth-kickstart.json
+  - oauth2-proxy.yaml        (auth gate config)
 SUMMARYEOF
 
 if [ -n "$missing" ]; then
@@ -466,11 +521,11 @@ existing Nginx Proxy Manager/Traefik network) - in your proxy, point each domain
 the corresponding container name + internal port:
   PUBLIC_DOMAIN            -> slackcat-slackopy:4321
   FUSIONAUTH_PUBLIC_DOMAIN -> slackcat-fusionauth:9011
-  FILES_PUBLIC_DOMAIN      -> slackcat-seaweedfs:8080
 (if your reverse proxy isn't itself running in Docker, add "ports:" mappings back
 to the relevant services in docker-compose.yml instead, and drop the "proxy" network
 entries)
 
 Re-running this script later preserves the secrets already generated and only
-rewrites docker-compose.yml/fusionauth-kickstart.json from the current templates.
+rewrites docker-compose.yml/fusionauth-kickstart.json/oauth2-proxy.yaml from the
+current templates.
 SUMMARYEOF

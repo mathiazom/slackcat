@@ -53,16 +53,16 @@
           },
           "oauthConfiguration": {
             "authorizedRedirectURLs": [
-              "http://localhost:4321/api/auth/callback/fusionauth"
+              "http://localhost:4180/oauth2/callback"
             ],
-            "logoutURL": "http://localhost:4321",
+            "logoutURL": "http://localhost:4180",
             "clientSecret": "#{clientSecret}",
             "enabledGrants": [
               "authorization_code",
               "refresh_token"
             ],
             "generateRefreshTokens": true,
-            "requireRegistration": true
+            "requireRegistration": false
           }
         }
       }
