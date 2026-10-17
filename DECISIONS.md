@@ -11,6 +11,15 @@ auth proxy in front gates every path, archived files included, redirecting strai
 to FusionAuth login: no public pages, no login screen. Logins last 30 days but are
 rechecked against FusionAuth hourly.
 
+## Search: Pagefind over the built pages
+
+Indexed with each site build and swapped in with it, so gated and fresh like the
+pages. Results are channels with their best-matching message groups. The channel
+page highlights and scrolls to a hit itself, as the only mechanism: browser fragment
+jumps land unreliably in Firefox. Ideally this would be native browser behavior
+alone, without JS; revisit when that lands reliably. Search needs JS, so it's hidden
+without. Norwegian stemming; reactions aren't indexed until results are per message.
+
 ## slackpack stores Slack's raw JSON
 
 A minimal own client (`internal/slackapi`) rather than a typed library, so no field
