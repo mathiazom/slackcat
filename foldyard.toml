@@ -168,7 +168,7 @@ lives outside this box, out of your reach.
 You may not be alone: several sessions can attach to this one box and checkout. You run
 as root, so files you create land root-owned.
 
-The repos are git submodules: slackpack (Go), slackback (.NET 9, under Slackback/),
+The repos are git submodules: slackpack (Go), slackback (.NET 11, under Slackback/),
 slackopy (Astro, Node 26 + pnpm) and slacktrack. Their toolchains are installed —
 `go`, `dotnet`, `node`/`pnpm`, plus `actionlint`, `shellcheck`, `jq` and `python3`. The box
 has its own slackopy/node_modules and slackback bin/obj (shadow volumes), so installs and
@@ -275,13 +275,13 @@ SKILL in .claude/skills/ (the model — modes, egress, why a change didn't take)
 # install = "curl -fsSL https://get.pulumi.com | sh -s -- --install-root /opt/fy-tools --no-edit-path"
 #
 # ── Toolchains for the submodules ────────────────────────────────────────────────────────
-# slackpack: Go · slackback: .NET 9 · slackopy: Node 26 + pnpm (via corepack, as in its
+# slackpack: Go · slackback: .NET 11 · slackopy: Node 26 + pnpm (via corepack, as in its
 # Dockerfile) · CI workflows: actionlint + shellcheck. Images are built with the engine
 # the box already has (docker/podman).
 #
 # Toolchains go in /usr/local/<tool> with symlinks in /usr/local/bin, since PATH can't be
 # set here. Each install picks the latest release of the line the repos are on, so a
-# recreated box is current. Bump the line (Node 26, .NET 9.0) together with the Dockerfiles.
+# recreated box is current. Bump the line (Node 26, .NET 11.0) together with the Dockerfiles.
 [box]
 packages = [
   "jq",          # tool installs below + general use
@@ -329,7 +329,7 @@ name = "dotnet"
 install = """
 set -eu
 curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-bash /tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/local/dotnet --no-path
+bash /tmp/dotnet-install.sh --channel 11.0 --install-dir /usr/local/dotnet --no-path
 rm /tmp/dotnet-install.sh
 ln -sf /usr/local/dotnet/dotnet /usr/local/bin/dotnet
 """
