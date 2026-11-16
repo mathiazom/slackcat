@@ -115,6 +115,7 @@ recommend = [
   { host = "proxy.golang.org", why = "Go modules (slackpack) + actionlint install" },
   { host = "sum.golang.org", why = "Go module checksum database" },
   { host = "dot.net", why = ".NET — dotnet-install.sh (slackback)" },
+  { host = "ci.dot.net", why = ".NET — dotnet-install.sh's first latest-version lookup (else ~30s of retries)" },
   { host = "builds.dotnet.microsoft.com", why = ".NET — SDK download" },
   { host = "api.nuget.org", why = "NuGet packages (slackback)" },
   { host = "nodejs.org", why = "Node — release tarball + checksums (slackopy)" },
